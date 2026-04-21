@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="de" id="html-root">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZombieWave V5</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --gold:#f7c948;--dark:#0d1117;--panel:#111827;--border:#2a3a50;
+  --red:#c0392b;--green:#27ae60;--blue:#2980b9;--purple:#8e44ad;
+}
+body{background:#0a0a14;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Nunito',sans-serif;overflow:hidden;cursor:none;}
+canvas{display:block;border-radius:8px;border:3px solid var(--gold);position:relative;z-index:1;}
+#wrap{position:relative;display:inline-block;user-select:none;pointer-events:all;}
+
+
+
+/* LEVEL CARDS */
+.level-card{background:#0d1825;border:2px solid var(--border);border-radius:12px;padding:.65rem .5rem;text-align:center;cursor:pointer;transition:border-color .15s,transform .12s;position:relative;}
+.level-card:hover:not(.locked){border-color:var(--gold);transform:scale(1.04);}
+.level-card.sel{border-color:var(--gold);background:#1a2535;}
+.level-card.locked{opacity:.4;cursor:default;}
+.level-card.locked::after{content:'🔒';position:absolute;top:4px;right:6px;font-size:.7rem;}
+.level-icon{font-size:1.4rem;margin-bottom:.2rem;}
+.level-name{font-family:'Bangers',cursive;font-size:.82rem;color:var(--gold);line-height:1.1;}
+.level-req{font-size:.6rem;color:#5a7a90;margin-top:.15rem;}
+
+/* FRIENDS */
+.friend-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0d1825;border-radius:8px;margin:4px 0;font-size:.82rem;}
+.friend-avatar{width:30px;height:30px;border-radius:50%;background:#1a2a40;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:#7ecff7;flex-shrink:0;}
+.friend-name{font-weight:700;color:#c8d8e8;flex:1;}
+.friend-status{font-size:.7rem;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+.friend-status.online{background:#1a3a20;color:#27ae60;}
+.friend-status.offline{background:#1a1a2a;color:#555;}
+.friend-status.ingame{background:#1a2535;color:#3498db;}
+.friend-req-row{display:flex;align-items:center;gap:6px;padding:5px 8px;background:#0d1825;border-radius:8px;margin:3px 0;font-size:.8rem;color:#9db4c8;}
+.notif-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;margin-left:4px;vertical-align:middle;}
+
+/* ── OVERLAYS ── */
+.ov{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(5,8,18,.92);z-index:100;border-radius:6px;overflow-y:auto;pointer-events:all;cursor:default;}
+.ov.h{display:none;}
+.panel{background:var(--panel);border:2.5px solid var(--gold);border-radius:16px;padding:1.6rem 2rem;text-align:center;max-width:520px;width:94%;}
+.panel.wide{max-width:720px;}
+h1{font-family:'Bangers',cursive;font-size:2.8rem;color:var(--gold);letter-spacing:3px;text-shadow:3px 3px 0 #7a5c00;margin-bottom:.2rem;}
+h2{font-family:'Bangers',cursive;font-size:1.8rem;color:var(--gold);margin-bottom:.7rem;}
+h3{font-family:'Bangers',cursive;font-size:1.3rem;color:var(--gold);margin-bottom:.5rem;}
+p,label{color:#9db4c8;font-size:.85rem;line-height:1.6;}
+input[type=text],input[type=password]{background:#0d1825;border:1.5px solid var(--border);border-radius:8px;color:#e0e8f0;font-size:.9rem;padding:.45rem .8rem;width:100%;margin:.3rem 0;font-family:'Nunito',sans-serif;outline:none;}
+input[type=text]:focus,input[type=password]:focus{border-color:var(--gold);}
+.btn{display:inline-block;background:var(--gold);color:#111;font-family:'Bangers',cursive;font-size:1.1rem;letter-spacing:1px;padding:.5rem 1.6rem;border:none;border-radius:9px;cursor:pointer;margin:.25rem;transition:transform .1s,filter .15s;pointer-events:all;}
+.btn:hover{filter:brightness(1.15);transform:scale(1.04);}
+.btn:active{transform:scale(.96);}
+.btn.red{background:var(--red);color:#fff;}
+.btn.green{background:var(--green);color:#fff;}
+.btn.blue{background:var(--blue);color:#fff;}
+.btn.grey{background:#333;color:#aaa;}
+.btn.purple{background:var(--purple);color:#fff;}
+.btn.sm{font-size:.9rem;padding:.35rem 1rem;}
+.err{color:#e74c3c;font-size:.8rem;margin:.3rem 0;min-height:16px;}
+.coins-disp{font-family:'Bangers',cursive;color:var(--gold);font-size:1.1rem;}
+
+/* TABS */
+.tabs{display:flex;gap:6px;justify-content:center;margin-bottom:1rem;flex-wrap:wrap;}
+.tab{padding:.35rem 1.1rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:#9db4c8;font-family:'Bangers',cursive;font-size:1rem;cursor:pointer;pointer-events:all;}
+.tab.on{background:var(--gold);color:#111;border-color:var(--gold);}
+
+/* SHOP */
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:.8rem 0;}
+.shop-card{background:#0d1825;border:2px solid var(--border);border-radius:12px;padding:.75rem .6rem;text-align:center;cursor:pointer;transition:border-color .15s,transform .12s;}
+.shop-card:hover:not(.owned):not(.locked){border-color:var(--gold);transform:scale(1.04);}
+.shop-card.owned{border-color:var(--green);cursor:default;}
+.shop-card.locked{opacity:.45;cursor:default;}
+.shop-card.maxlvl{border-color:#e74c3c !important;}
+.shop-icon{font-size:1.5rem;margin-bottom:.25rem;}
+.shop-name{font-family:'Bangers',cursive;font-size:.9rem;color:var(--gold);}
+.shop-price{font-size:.72rem;color:#f7c948;margin-top:.15rem;}
+.shop-desc{font-size:.65rem;color:#7a9ab0;margin-top:.15rem;line-height:1.3;}
+
+/* UPGRADES */
+.upg-cards,.loot-items{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:.8rem;}
+.upg-card,.loot-item{background:#0d1825;border:2.5px solid var(--gold);border-radius:12px;padding:.8rem .65rem;width:145px;cursor:pointer;transition:transform .15s,border-color .15s;pointer-events:all;text-align:center;}
+.upg-card:hover,.loot-item:hover{transform:scale(1.07);border-color:#ffe577;}
+.loot-item{border-color:var(--green);}
+.upg-icon{font-size:1.5rem;margin-bottom:.25rem;}
+.upg-name{font-family:'Bangers',cursive;font-size:.9rem;color:var(--gold);}
+.upg-desc{font-size:.68rem;color:#8aa8c0;line-height:1.3;margin-top:.2rem;}
+.loot-item .upg-name{color:var(--green);}
+
+/* HIGHSCORE */
+.hs-table{width:100%;border-collapse:collapse;font-size:.78rem;margin:.5rem 0;}
+.hs-table thead tr{background:#0a1220;}
+.hs-table th{padding:6px 7px;color:#7a9ab0;font-weight:700;text-align:left;border-bottom:1.5px solid var(--border);}
+.hs-table th.r,.hs-table td.r{text-align:right;}
+.hs-table th.c,.hs-table td.c{text-align:center;}
+.hs-table tbody tr{border-bottom:1px solid var(--border);}
+.hs-table tbody tr:hover{background:rgba(247,201,72,.06);}
+.hs-table td{padding:5px 7px;color:#c8d8e8;vertical-align:middle;}
+.hs-table tbody tr:nth-child(1) td{color:#f7c948;font-weight:700;}
+.hs-table tbody tr:nth-child(2) td{color:#c0c0c0;font-weight:700;}
+.hs-table tbody tr:nth-child(3) td{color:#cd7f32;font-weight:700;}
+.hs-table tbody tr.my-row td{background:rgba(247,201,72,.08);color:#f7c948 !important;}
+.hs-scroll{max-height:220px;overflow-y:auto;}
+.hs-scroll::-webkit-scrollbar{width:4px;}
+.hs-scroll::-webkit-scrollbar-thumb{background:#2a3a50;border-radius:2px;}
+.diff-badge{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:5px;}
+.diff-easy{background:#1a3a20;color:#2ecc71;}
+.diff-normal{background:#1a2a40;color:#3498db;}
+.diff-hard{background:#3a1a10;color:#e67e22;}
+.diff-nightmare{background:#2a0a20;color:#9b59b6;}
+.hs-filter{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin:.4rem 0;}
+.hs-filter-btn,.hs-view-btn,.hs-sort-btn{padding:2px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:#7a9ab0;font-size:.72rem;cursor:pointer;font-family:'Nunito',sans-serif;pointer-events:all;}
+.hs-filter-btn.on,.hs-view-btn.on,.hs-sort-btn.on{background:var(--gold);color:#111;border-color:var(--gold);}
+.hs-view-btn{font-family:'Bangers',cursive;font-size:.88rem;padding:3px 12px;}
+
+/* DIFFICULTY */
+.diff-grid{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:.7rem 0;}
+.diff-card{background:#0d1825;border:2px solid var(--border);border-radius:12px;padding:.7rem .9rem;cursor:pointer;min-width:90px;text-align:center;transition:border-color .15s;}
+.diff-card:hover,.diff-card.sel{border-color:var(--gold);}
+.diff-card.sel{background:#1a2535;}
+.diff-label{font-family:'Bangers',cursive;font-size:.95rem;color:var(--gold);}
+.diff-sub{font-size:.68rem;color:#7a9ab0;}
+
+/* PARTY */
+.party-code{font-family:'Bangers',cursive;font-size:2.8rem;letter-spacing:8px;color:#f7c948;background:#0d1825;border:2px solid var(--gold);border-radius:12px;padding:.5rem 1.5rem;margin:1rem auto;display:inline-block;}
+.party-member{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0d1825;border-radius:8px;margin:4px 0;font-size:.85rem;color:#c8d8e8;}
+.party-member .leader-badge{font-size:.65rem;background:#f7c948;color:#111;border-radius:4px;padding:1px 5px;font-weight:700;}
+.party-member .ready-dot{width:10px;height:10px;border-radius:50%;margin-left:auto;}
+.party-member .ready-dot.on{background:#27ae60;}
+.party-member .ready-dot.off{background:#555;}
+.chat-box{background:#0a1220;border:1px solid var(--border);border-radius:8px;height:100px;overflow-y:auto;padding:6px 8px;font-size:.75rem;color:#7a9ab0;text-align:left;margin:.5rem 0;}
+.chat-box .msg{margin-bottom:3px;}
+.chat-box .msg b{color:#7ecff7;}
+.chat-input-row{display:flex;gap:6px;}
+.chat-input-row input{flex:1;font-size:.8rem;padding:.3rem .6rem;}
+.mode-card{background:#0d1825;border:2px solid var(--border);border-radius:12px;padding:.8rem;cursor:pointer;text-align:center;min-width:120px;transition:border-color .15s;}
+.mode-card:hover,.mode-card.sel{border-color:var(--gold);}
+.mode-card.sel{background:#1a2535;}
+.mode-icon{font-size:1.8rem;margin-bottom:.3rem;}
+.mode-name{font-family:'Bangers',cursive;font-size:1rem;color:var(--gold);}
+.mode-desc{font-size:.7rem;color:#7a9ab0;margin-top:.2rem;}
+
+/* MP HUD extras */
+.mp-player-bar{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:none;z-index:5;flex-wrap:wrap;justify-content:center;}
+.mp-player-card{background:rgba(5,8,18,.85);border:1.5px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.75rem;min-width:100px;}
+.mp-player-card.me{border-color:var(--gold);}
+.mp-player-card .mp-name{font-family:'Bangers',cursive;color:var(--gold);font-size:.85rem;}
+.mp-player-card .mp-hp{color:#27ae60;}
+.mp-player-card .mp-kills{color:#7ecff7;}
+
+/* PAUSE */
+#pause-upg-list{text-align:left;max-height:140px;overflow-y:auto;margin:.4rem 0 .7rem;}
+#pause-upg-list li{color:#9db4c8;font-size:.76rem;padding:2px 0;border-bottom:1px solid var(--border);list-style:none;}
+
+/* SETTINGS */
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border);}
+.settings-row label{color:#9db4c8;font-size:.88rem;}
+.lang-btn{padding:.3rem .9rem;border-radius:7px;border:1.5px solid var(--border);background:transparent;color:#7a9ab0;font-size:.85rem;cursor:pointer;pointer-events:all;}
+.lang-btn.on{background:var(--gold);color:#111;border-color:var(--gold);}
+.vol-row{display:flex;align-items:center;gap:10px;justify-content:center;margin:.5rem 0;}
+.vol-row label{color:#9db4c8;font-size:.82rem;min-width:55px;text-align:right;}
+.vol-row input[type=range]{width:110px;accent-color:var(--gold);}
+
+/* ACCT + WEAPON BAR */
+#acct-bar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:5px 12px;background:rgba(5,8,18,.82);border-bottom:1px solid var(--border);font-size:.78rem;color:#7a9ab0;pointer-events:none;z-index:5;}
+#acct-bar b{color:var(--gold);}
+#acct-bar .coins{color:#f7c948;font-family:'Bangers',cursive;font-size:.9rem;}
+#wpn-bar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:all;z-index:5;}
+.wpn-slot{width:44px;height:44px;border-radius:8px;background:rgba(5,8,18,.85);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.2rem;cursor:pointer;transition:border-color .1s;}
+.wpn-slot.active{border-color:var(--gold);}
+#boss-bar{display:none;position:absolute;bottom:72px;left:50%;transform:translateX(-50%);width:280px;pointer-events:none;z-index:5;}
+#boss-warn{display:none;position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);font-family:'Bangers',cursive;font-size:2.3rem;color:#c0392b;text-shadow:3px 3px 0 #5a0000;letter-spacing:3px;pointer-events:none;z-index:6;text-align:center;}
+/* ADMIN */
+#admin-btn{display:none;position:absolute;top:8px;right:8px;background:#e74c3c;color:#fff;font-family:'Bangers',cursive;font-size:.82rem;border:none;border-radius:8px;padding:4px 11px;cursor:pointer;z-index:25;pointer-events:all;}
+#admin-panel{display:none;position:absolute;top:46px;right:8px;background:rgba(10,15,30,.97);border:2px solid #e74c3c;border-radius:12px;padding:10px 13px;z-index:30;min-width:175px;pointer-events:all;}
+.admin-title{font-family:'Bangers',cursive;color:#e74c3c;font-size:.95rem;letter-spacing:1px;margin-bottom:7px;text-align:center;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+
+  <!-- HUD elements -->
+  <div id="acct-bar" style="display:none;">
+    <span>👤 <b id="ab-name">-</b></span>
+    <span class="coins">🪙 <span id="ab-coins">0</span></span>
+  </div>
+  <div id="wpn-bar" style="display:none;"></div>
+  <div id="boss-bar">
+    <div style="background:rgba(5,8,18,.9);border:2px solid #c0392b;border-radius:9px;padding:5px 12px;">
+      <div style="color:#c0392b;font-family:'Bangers',cursive;font-size:.88rem;text-align:center;" data-i18n="boss_bar">☠ BOSS ☠</div>
+      <div style="background:#222;border-radius:5px;height:9px;overflow:hidden;margin-top:3px;"><div id="boss-fill" style="height:100%;background:#c0392b;width:100%;transition:width .2s;"></div></div>
+    </div>
+  </div>
+  <div id="boss-warn" data-i18n="boss_warn">⚠ BOSS NAHT! ⚠</div>
+
+  <!-- Multiplayer player cards (top-center during MP game) -->
+  <div class="mp-player-bar" id="mp-player-bar" style="top:50px;display:none;"></div>
+
+  <!-- Admin -->
+  <button id="admin-btn" onclick="toggleAdminPanel()">👑 Owner</button>
+  <!-- OWNER PANEL (MrMaik only) -->
+  <div id="admin-panel" style="min-width:210px;">
+    <div class="admin-title">👑 OWNER PANEL</div>
+
+    <!-- In-game buttons (only when game running) -->
+    <div id="owner-ingame-btns">
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('inf_hp')">∞ Leben</button>
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('inf_coins')">∞ Münzen</button>
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('minigun_nocool')">Minigun kein CD</button>
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('spawn_boss')">Boss spawnen</button>
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('spawn_wave')">Extra Welle</button>
+      <button class="btn red" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="adminCmd('god_mode')">God Mode</button>
+    </div>
+
+    <!-- Server commands (always visible) -->
+    <div style="border-top:1px solid #3a1a1a;margin:6px 0;padding-top:6px;">
+      <div style="color:#f7c948;font-size:.7rem;margin-bottom:3px;font-family:'Bangers',cursive;letter-spacing:.5px;">SERVER-BEFEHLE</div>
+      <div style="font-size:.62rem;color:#7a5050;margin-bottom:4px;line-height:1.5;">
+        /join {name} &nbsp;|&nbsp; /check {name}<br>
+        /edit {name} {feld} {wert}<br>
+        /admin {name} &nbsp;|&nbsp; /admin {name} revoke<br>
+        /ban {name} &nbsp;|&nbsp; /unban {name}<br>/delete {name}
+      </div>
+      <div style="display:flex;gap:4px;">
+        <input type="text" id="admin-cmd-input" placeholder="/admin MeinFreund"
+          tabindex="0" autocomplete="off" autocorrect="off" spellcheck="false"
+          style="flex:1;font-size:.72rem;padding:3px 6px;background:#1a0a0a;border:1px solid #5a2020;border-radius:5px;color:#ffaaaa;font-family:monospace;pointer-events:all;cursor:text;"
+          onkeydown="event.stopPropagation();if(event.key==='Enter')sendAdminCmd()">
+        <button class="btn red" style="font-size:.7rem;padding:3px 8px;" onclick="event.stopPropagation();sendAdminCmd()">▶</button>
+      </div>
+      <div id="admin-cmd-result" style="font-size:.68rem;color:#aaa;margin-top:4px;max-height:80px;overflow-y:auto;background:#0a0505;border-radius:4px;padding:3px 5px;word-break:break-all;display:none;font-family:monospace;white-space:pre-wrap;"></div>
+    </div>
+    <button class="btn grey" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="toggleAdminPanel()">Schließen</button>
+  </div>
+
+  <!-- ADMIN PANEL (granted by owner) -->
+  <div id="granted-admin-panel" style="display:none;position:absolute;top:46px;right:8px;background:rgba(10,20,40,.97);border:2px solid #3498db;border-radius:12px;padding:10px 13px;z-index:30;min-width:175px;pointer-events:all;">
+    <div style="font-family:'Bangers',cursive;color:#3498db;font-size:.95rem;letter-spacing:1px;margin-bottom:7px;text-align:center;">⚙ ADMIN PANEL</div>
+    <button class="btn blue" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="grantedAdminCmd('spawn_boss')">👹 Boss spawnen</button>
+    <button class="btn blue" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="grantedAdminCmd('spawn_wave')">🌊 Welle spawnen</button>
+    <div id="granted-admin-result" style="font-size:.68rem;color:#7ecff7;margin-top:4px;min-height:14px;text-align:center;"></div>
+    <button class="btn grey" style="font-size:.72rem;padding:3px 9px;display:block;width:100%;margin:3px 0;" onclick="document.getElementById('granted-admin-panel').style.display='none'">Schließen</button>
+  </div>
+  <button id="granted-admin-btn" style="display:none;position:absolute;top:8px;right:90px;background:#2980b9;color:#fff;font-family:Bangers,cursive;font-size:.82rem;border:none;border-radius:8px;padding:4px 11px;cursor:pointer;z-index:25;pointer-events:all;" onclick="toggleGrantedAdminPanel()">⚙ Admin</button>
+
+  <!-- ═══════════ OVERLAYS ═══════════ -->
+
+  <!-- AUTH -->
+  <div class="ov" id="ov-auth">
+    <div class="panel">
+      <h1>ZombieWave</h1>
+      <p style="color:#c0392b;font-family:'Bangers',cursive;font-size:.95rem;letter-spacing:1px;margin-bottom:.8rem;" data-i18n="tagline">Stadt der Verdammten</p>
+      <div class="tabs">
+        <button class="tab on" onclick="authTab('login')" data-i18n="login">Einloggen</button>
+        <button class="tab" onclick="authTab('register')" data-i18n="register">Registrieren</button>
+      </div>
+      <div id="auth-login">
+        <input type="text" id="l-user" data-i18n-ph="username_ph" placeholder="Benutzername" autocomplete="off">
+        <input type="password" id="l-pass" data-i18n-ph="password_ph" placeholder="Passwort">
+        <div class="err" id="l-err"></div>
+        <button class="btn green" onclick="doLogin()" data-i18n="login">Einloggen</button>
+      </div>
+      <div id="auth-reg" style="display:none;">
+        <input type="text" id="r-user" data-i18n-ph="username_ph" placeholder="Benutzername (3–16 Zeichen)" autocomplete="off">
+        <input type="password" id="r-pass" data-i18n-ph="password_ph" placeholder="Passwort (mind. 4 Zeichen)">
+        <input type="password" id="r-pass2" data-i18n-ph="password_repeat_ph" placeholder="Passwort wiederholen">
+        <div class="err" id="r-err"></div>
+        <button class="btn green" onclick="doRegister()" data-i18n="register">Registrieren</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div class="ov h" id="ov-menu">
+    <div class="panel wide">
+      <h1>ZombieWave</h1>
+      <p id="menu-welcome" style="margin-bottom:.7rem;"></p>
+      <div class="tabs">
+        <button class="tab on" onclick="menuTab('play')" id="mt-play" data-i18n="play">Spielen</button>
+        <button class="tab" onclick="menuTab('mp')" id="mt-mp" data-i18n="multiplayer">Multiplayer</button>
+        <button class="tab" onclick="menuTab('shop')" id="mt-shop" data-i18n="shop">Shop</button>
+        <button class="tab" onclick="menuTab('upgrades')" id="mt-upg" data-i18n="upgrades">Upgrades</button>
+        <button class="tab" onclick="menuTab('hs')" id="mt-hs" data-i18n="leaderboard">Bestenliste</button>
+        <button class="tab" onclick="menuTab('friends')" id="mt-friends">Freunde <span id="friend-notif" style="display:none;" class="notif-dot"></span></button>
+        <button class="tab" onclick="menuTab('settings')" id="mt-settings" data-i18n="settings">Einstellungen</button>
+        <button class="tab" id="mt-admin-view" style="display:none;border-color:#e74c3c;color:#e74c3c;" onclick="menuTab('admin-view')">👁 Admin-View</button>
+      </div>
+
+      <!-- PLAY TAB -->
+      <div id="tab-play">
+        <h3>Level wählen</h3>
+        <div id="level-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:.6rem 0;"></div>
+        <h3 data-i18n="difficulty" style="margin-top:.6rem;">Schwierigkeit</h3>
+        <div class="diff-grid">
+          <div class="diff-card sel" onclick="selDiff('easy',this)"><div class="diff-label" data-i18n="easy">Einfach</div><div class="diff-sub">×0.5 🪙</div></div>
+          <div class="diff-card" onclick="selDiff('normal',this)"><div class="diff-label" data-i18n="normal">Normal</div><div class="diff-sub">×1 🪙</div></div>
+          <div class="diff-card" onclick="selDiff('hard',this)"><div class="diff-label" data-i18n="hard">Schwer</div><div class="diff-sub">×1.5 🪙</div></div>
+          <div class="diff-card" onclick="selDiff('nightmare',this)"><div class="diff-label" data-i18n="nightmare">Albtraum</div><div class="diff-sub">×2 🪙</div></div>
+        </div>
+        <p style="font-size:.75rem;color:#5a7a90;margin:.3rem 0;">Überlebe 5 Min auf Normal oder höher um das nächste Level freizuschalten.</p>
+        <div style="margin-top:.8rem;">
+          <button class="btn green" style="font-size:1.2rem;padding:.55rem 2rem;" onclick="startSoloGame()" data-i18n="play_solo">▶ Solo spielen</button>
+          <button class="btn grey sm" onclick="doLogout()" data-i18n="logout">Abmelden</button>
+        </div>
+      </div>
+
+      <!-- MULTIPLAYER TAB -->
+      <div id="tab-mp" style="display:none;">
+        <div id="mp-lobby-pre">
+          <h3 data-i18n="mp_choose_mode">Modus wählen</h3>
+          <div style="display:flex;gap:10px;justify-content:center;margin:.7rem 0;">
+            <div class="mode-card sel" onclick="selMode('coop',this)">
+              <div class="mode-icon">🤝</div>
+              <div class="mode-name" data-i18n="coop">Koop</div>
+              <div class="mode-desc" data-i18n="coop_desc">Zusammen gegen Zombies</div>
+            </div>
+            <div class="mode-card" onclick="selMode('versus',this)">
+              <div class="mode-icon">⚔️</div>
+              <div class="mode-name" data-i18n="versus">Versus</div>
+              <div class="mode-desc" data-i18n="versus_desc">Wer hat mehr Kills?</div>
+            </div>
+          </div>
+          <h3 style="margin-top:.5rem;" data-i18n="difficulty">Schwierigkeit</h3>
+          <div class="diff-grid" id="mp-diff-grid">
+            <div class="diff-card sel" onclick="selMpDiff('easy',this)"><div class="diff-label" data-i18n="easy">Einfach</div></div>
+            <div class="diff-card" onclick="selMpDiff('normal',this)"><div class="diff-label" data-i18n="normal">Normal</div></div>
+            <div class="diff-card" onclick="selMpDiff('hard',this)"><div class="diff-label" data-i18n="hard">Schwer</div></div>
+            <div class="diff-card" onclick="selMpDiff('nightmare',this)"><div class="diff-label" data-i18n="nightmare">Albtraum</div></div>
+          </div>
+          <h3 style="margin-top:.5rem;font-size:1rem;">🗺️ Level wählen</h3>
+          <div id="mp-level-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin:.4rem 0;max-height:120px;overflow-y:auto;"></div>
+          <div style="margin-top:.8rem;">
+            <button class="btn green" onclick="createParty()" data-i18n="create_party">🎮 Party erstellen</button>
+          </div>
+          <div style="margin:.8rem 0;display:flex;gap:8px;align-items:center;justify-content:center;">
+            <input type="text" id="join-code-input" style="width:130px;text-transform:uppercase;text-align:center;font-size:1.1rem;letter-spacing:3px;" maxlength="5" data-i18n-ph="party_code_ph" placeholder="CODE">
+            <button class="btn blue" onclick="joinParty()" data-i18n="join_party">Beitreten</button>
+          </div>
+          <div class="err" id="mp-err"></div>
+        </div>
+
+        <!-- In lobby -->
+        <div id="mp-lobby" style="display:none;">
+          <p data-i18n="party_code_label" style="color:#7a9ab0;font-size:.8rem;margin-bottom:.2rem;">Party-Code:</p>
+          <div class="party-code" id="lobby-code">????</div>
+          <div id="lobby-members" style="margin:.5rem 0;text-align:left;max-width:300px;margin:auto;"></div>
+          <div class="chat-box" id="lobby-chat"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" data-i18n-ph="chat_ph" placeholder="Nachricht..." maxlength="100" onkeydown="if(event.key==='Enter')sendChat()">
+            <button class="btn sm" onclick="sendChat()" data-i18n="send">Senden</button>
+          </div>
+          <div style="margin-top:.7rem;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <button class="btn green" id="lobby-ready-btn" onclick="toggleReady()" data-i18n="ready">Bereit</button>
+            <button class="btn green" id="lobby-start-btn" style="display:none;" onclick="leaderStartGame()" data-i18n="start_game">▶ Spiel starten</button>
+            <button class="btn grey sm" onclick="leaveParty()" data-i18n="leave_party">Verlassen</button>
+          </div>
+          <div class="err" id="lobby-err"></div>
+        </div>
+      </div>
+
+      <!-- SHOP TAB -->
+      <div id="tab-shop" style="display:none;">
+        <p class="coins-disp">🪙 <span id="shop-coins">0</span></p>
+        <h3 style="margin-top:.6rem;" data-i18n="weapons">Waffen</h3>
+        <div class="shop-grid" id="shop-weapons"></div>
+        <h3 style="margin-top:.4rem;" data-i18n="shop_extras">Extras</h3>
+        <div class="shop-grid" id="shop-perma"></div>
+      </div>
+
+      <!-- PERMA UPGRADES TAB -->
+      <div id="tab-upgrades" style="display:none;">
+        <p class="coins-disp">🪙 <span id="upg-coins">0</span></p>
+        <p style="margin:.4rem 0;font-size:.78rem;" data-i18n="perma_desc">Permanente Verbesserungen:</p>
+        <div class="shop-grid" id="perma-upg-list"></div>
+      </div>
+
+      <!-- HIGHSCORE TAB -->
+      <div id="tab-hs" style="display:none;">
+        <div style="display:flex;gap:7px;justify-content:center;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button class="hs-view-btn on" onclick="hsSetView('global',this)" data-i18n="global_lb">🌍 Global</button>
+          <button class="hs-view-btn" onclick="hsSetView('mine',this)" data-i18n="my_scores">👤 Meine Scores</button>
+          <button id="hs-edit-btn" class="hs-view-btn" style="display:none;border-color:#e74c3c;color:#e74c3c;" onclick="toggleHsEdit()">✏ Bearbeiten</button>
+        </div>
+        <div class="hs-filter">
+          <button class="hs-filter-btn on" onclick="hsFilter('all',this)" data-i18n="all">Alle</button>
+          <button class="hs-filter-btn" onclick="hsFilter('easy',this)" data-i18n="easy">Einfach</button>
+          <button class="hs-filter-btn" onclick="hsFilter('normal',this)" data-i18n="normal">Normal</button>
+          <button class="hs-filter-btn" onclick="hsFilter('hard',this)" data-i18n="hard">Schwer</button>
+          <button class="hs-filter-btn" onclick="hsFilter('nightmare',this)" data-i18n="nightmare">Albtraum</button>
+        </div>
+        <div id="hs-sort-row" style="display:flex;gap:5px;justify-content:center;margin:.3rem 0;">
+          <button class="hs-sort-btn on" onclick="hsSetSort('secs',this)" data-i18n="sort_time">⏱ Zeit</button>
+          <button class="hs-sort-btn" onclick="hsSetSort('kills',this)" data-i18n="sort_kills">☠ Kills</button>
+          <button class="hs-sort-btn" onclick="hsSetSort('wave',this)" data-i18n="sort_wave">🌊 Welle</button>
+        </div>
+        <div class="hs-scroll">
+          <table class="hs-table">
+            <thead><tr id="hs-thead-row"></tr></thead>
+            <tbody id="hs-tbody"></tbody>
+          </table>
+          <div id="hs-empty" style="display:none;color:#3a5060;font-size:.82rem;padding:1rem 0;text-align:center;" data-i18n="no_entries">Noch keine Einträge.</div>
+        </div>
+        <div style="margin-top:.4rem;text-align:center;">
+          <div id="hs-summary" style="font-size:.7rem;color:#5a7a90;"></div>
+          <div id="hs-my-rank" style="font-size:.75rem;color:#f7c948;margin-top:.2rem;min-height:14px;"></div>
+        </div>
+      </div>
+
+
+      <!-- FRIENDS TAB -->
+      <div id="tab-friends" style="display:none;">
+        <div style="display:flex;gap:8px;margin-bottom:.7rem;">
+          <input type="text" id="friend-search-input" placeholder="Benutzername eingeben..." style="flex:1;font-size:.85rem;" autocomplete="off">
+          <button class="btn blue sm" onclick="sendFriendRequest()">+ Anfrage</button>
+        </div>
+        <div class="err" id="friend-err"></div>
+        <div id="friend-requests-section" style="display:none;margin-bottom:.8rem;">
+          <h3 style="font-size:1rem;margin-bottom:.3rem;">📬 Anfragen</h3>
+          <div id="friend-requests-list"></div>
+        </div>
+        <h3 style="font-size:1rem;margin-bottom:.3rem;">👥 Freunde</h3>
+        <div id="friends-list" style="max-height:240px;overflow-y:auto;"></div>
+        <div id="friends-empty" style="color:#3a5060;font-size:.82rem;padding:.8rem 0;text-align:center;display:none;">Noch keine Freunde. Sende jemandem eine Anfrage!</div>
+        <div style="margin-top:.8rem;text-align:center;">
+          <button class="btn grey sm" onclick="refreshFriends()">↺ Aktualisieren</button>
+        </div>
+      </div>
+
+
+      <!-- ADMIN VIEW TAB (player inspection) -->
+      <div id="tab-admin-view" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:.8rem;">
+          <div style="font-family:'Bangers',cursive;font-size:1rem;color:#e74c3c;">👁 Admin-Ansicht:</div>
+          <div id="admin-view-name" style="font-family:'Bangers',cursive;font-size:1.1rem;color:#f7c948;"></div>
+          <button class="btn grey sm" onclick="closeAdminView()">✕ Schließen</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button class="btn red sm" onclick="adminDeleteWeapons()">🗑 Alle Waffen löschen</button>
+          <button class="btn red sm" onclick="adminDeleteUpgrades()">🗑 Alle Upgrades löschen</button>
+          <button class="btn red sm" onclick="adminResetPlayer()">💀 Komplett zurücksetzen</button>
+          <button class="btn red sm" onclick="adminResetAll()" style="background:#7b0000;">⚠ ALLE zurücksetzen</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.6rem;">
+          <div style="background:#0d1825;border-radius:8px;padding:.6rem;">
+            <div style="font-family:'Bangers',cursive;color:#f7c948;font-size:.9rem;margin-bottom:.4rem;">🔫 Waffen</div>
+            <div id="admin-view-weapons" style="font-size:.78rem;color:#c8d8e8;"></div>
+          </div>
+          <div style="background:#0d1825;border-radius:8px;padding:.6rem;">
+            <div style="font-family:'Bangers',cursive;color:#f7c948;font-size:.9rem;margin-bottom:.4rem;">⬆ Permanente Upgrades</div>
+            <div id="admin-view-upgrades" style="font-size:.78rem;color:#c8d8e8;"></div>
+          </div>
+        </div>
+        <div style="background:#0d1825;border-radius:8px;padding:.6rem;margin-bottom:.6rem;">
+          <div style="font-family:'Bangers',cursive;color:#f7c948;font-size:.9rem;margin-bottom:.4rem;">🪙 Münzen & Extras</div>
+          <div id="admin-view-misc" style="font-size:.78rem;color:#c8d8e8;"></div>
+        </div>
+        <div class="err" id="admin-view-err" style="color:#27ae60;"></div>
+      </div>
+
+      <!-- SETTINGS TAB -->
+      <div id="tab-settings" style="display:none;">
+        <div class="settings-row">
+          <label data-i18n="language">Sprache</label>
+          <div>
+            <button class="lang-btn on" id="lang-de" onclick="setLang('de',this)">🇩🇪 Deutsch</button>
+            <button class="lang-btn" id="lang-en" onclick="setLang('en',this)">🇬🇧 English</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label data-i18n="music_vol">Musik</label>
+          <div class="vol-row" style="margin:0;">
+            <input type="range" id="vol-settings" min="0" max="1" step=".01" value=".35" oninput="setVol(this.value)">
+          </div>
+        </div>
+        <!-- Password change -->
+        <div style="margin:.8rem 0;background:#0d1825;border-radius:10px;padding:.8rem;">
+          <div style="font-family:'Bangers',cursive;color:#f7c948;font-size:.95rem;margin-bottom:.5rem;">🔑 Passwort ändern</div>
+          <input type="password" id="pw-old" placeholder="Altes Passwort"
+            style="margin:.2rem 0;" onkeydown="event.stopPropagation()">
+          <input type="password" id="pw-new" placeholder="Neues Passwort (mind. 4 Zeichen)"
+            style="margin:.2rem 0;" onkeydown="event.stopPropagation()">
+          <input type="password" id="pw-new2" placeholder="Neues Passwort wiederholen"
+            style="margin:.2rem 0;" onkeydown="event.stopPropagation()">
+          <div id="pw-msg" style="font-size:.78rem;min-height:16px;margin:.3rem 0;"></div>
+          <button class="btn green sm" onclick="changePassword()">Passwort speichern</button>
+        </div>
+        <div class="settings-row">
+          <label data-i18n="account">Account</label>
+          <button class="btn grey sm" onclick="doLogout()" data-i18n="logout">Abmelden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- LEVEL GOAL REACHED -->
+  <!-- LEVEL COMPLETE -->
+  <div class="ov h" id="ov-level-complete">
+    <div class="panel">
+      <div style="font-size:2.5rem;margin-bottom:.3rem;">🏆</div>
+      <h2 style="color:#27ae60;">Level abgeschlossen!</h2>
+      <p id="lc-stats" style="margin:.5rem 0;color:#9db4c8;"></p>
+      <p id="lc-coins" style="font-family:'Bangers',cursive;font-size:1.4rem;color:#f7c948;margin:.4rem 0;"></p>
+      <p id="lc-unlock" style="font-size:.85rem;color:#7ecff7;margin:.3rem 0;min-height:18px;"></p>
+      <div style="margin-top:.8rem;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn green" onclick="continueLevel()">▶ Weiterspielen</button>
+        <button id="lc-next-btn" class="btn blue" onclick="goNextLevel()" style="display:none;">⏭ Nächstes Level</button>
+        <button class="btn grey sm" onclick="goMenu()">🏠 Menü</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-GAME OVERLAYS -->
+  <div class="ov h" id="ov-upgrade">
+    <div class="panel">
+      <h2 data-i18n="level_up">⬆ Level Up!</h2>
+      <p style="color:#7ecff7;">Kills: <span id="upg-kills">0</span></p>
+      <div id="upg-cards" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem;"></div>
+      <div style="margin-top:0.6rem;">
+        <button type="button" onclick="forceCloseUpgrade()" style="background:transparent;border:1px solid #2a3a50;border-radius:8px;color:#5a7a90;font-size:0.75rem;padding:4px 14px;cursor:pointer;font-family:inherit;">
+          Überspringen
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="ov h" id="ov-loot">
+    <div class="panel">
+      <h2 data-i18n="boss_defeated">💀 Boss besiegt!</h2>
+      <p style="color:#27ae60;" data-i18n="loot_pick">Wähle eine Belohnung:</p>
+      <div class="loot-items" id="loot-items"></div>
+    </div>
+  </div>
+  <div class="ov h" id="ov-pause">
+    <div class="panel">
+      <h2>⏸ <span data-i18n="pause">Pause</span></h2>
+      <p style="color:#7ecff7;margin-bottom:.4rem;" data-i18n="active_upgrades">Aktive Upgrades:</p>
+      <ul id="pause-upg-list"></ul>
+      <div class="vol-row"><label data-i18n="music">🎵 Musik</label><input type="range" id="vol-pause" min="0" max="1" step=".01" value=".35" oninput="setVol(this.value)"></div>
+      <div style="margin-top:.6rem;">
+        <button class="btn green" onclick="togglePause()" data-i18n="resume">▶ Weiter</button>
+        <button class="btn red" onclick="endRound(true)" data-i18n="give_up">✕ Aufgeben</button>
+      </div>
+    </div>
+  </div>
+  <div class="ov h" id="ov-end">
+    <div class="panel">
+      <h2 id="end-title"></h2>
+      <p id="end-stats"></p>
+      <p id="end-coins" style="font-family:'Bangers',cursive;font-size:1.3rem;color:#f7c948;margin:.4rem 0;"></p>
+      <div style="margin-top:.7rem;">
+        <button class="btn green" onclick="goMenu()" data-i18n="to_menu">Zum Menü</button>
+        <button class="btn blue" onclick="startSoloGame()" data-i18n="play_again">Nochmal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/levels.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/network.js"></script>
+<script src="/js/menu.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/audio.js"></script>
+<script src="/js/draw.js"></script>
+<script src="/js/level_system.js"></script>
+<script src="/js/game.js"></script>
+</body>
+</html>
